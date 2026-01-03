@@ -1,0 +1,5 @@
+{
+    "adb_path": "D:\\LDPlayer\\LDPlayer9\\adb.exe",
+    "device_ID": "127.0.0.1:5565",
+    "target_app_package": "com.pokemon.card.app"
+}
