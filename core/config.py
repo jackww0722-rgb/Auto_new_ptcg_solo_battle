@@ -1,31 +1,9 @@
 from pathlib import Path
 import json
 
-# --- ADB 環境設定 ---
-# 這裡維持原始字串即可，因為 subprocess 接收字串指令最穩定
-ADB_PATH = r"D:\LDPlayer\LDPlayer9\adb.exe"
-DEVICE_ID = "127.0.0.1:5565"
-
-CONFIG_FILE = Path("config.json")
-if CONFIG_FILE.exists():
-    try:
-        # 使用 pathlib 的讀取方法，簡潔有力
-        content = CONFIG_FILE.read_text(encoding="utf-8")
-        data = json.loads(content)
-        
-        # 讀取設定
-        ADB_PATH = data.get("adb_path", ADB_PATH)
-        DEVICE_ID = data.get("device_serial", DEVICE_ID)
-        
-        print(f"✅ 已載入外部設定 (Path: {CONFIG_FILE.resolve()})")
-    except Exception as e:
-        print(f"⚠️ 讀取 config.json 失敗: {e} (將使用預設值)")
-else:
-    print("ℹ️ 找不到 config.json，使用程式內建預設值。")
-
 
 # --- 參數設定 ---
-CONFIDENCE = 0.5
+CONFIDENCE = 0.6
 SCROLL_WAIT = 2.0
 LOOP_DELAY = 1.0
 
@@ -42,11 +20,38 @@ ROOT_DIR = CORE_DIR.parent
 # 4. 定義 assets 資料夾路徑
 ASSETS_DIR = ROOT_DIR / "assets"
 
+
 TOTAL_PACKAGES=13
 START_AT=1
 
 DIFFICULTY_LIST = ["diff_1.png", "diff_2.png", "diff_3.png", "diff_4.png"]
 STATE_FILE = "bot_state.json"
+
+
+
+# --- ADB 環境設定 ---
+# 這裡維持原始字串即可，因為 subprocess 接收字串指令最穩定
+ADB_PATH = r"adb"
+DEVICE_ID = None
+
+CONFIG_FILE =  ROOT_DIR / "config.json"
+if CONFIG_FILE.exists():
+    try:
+        # 使用 pathlib 的讀取方法，簡潔有力
+        content = CONFIG_FILE.read_text(encoding="utf-8")
+        data = json.loads(content)
+        
+        # 讀取設定
+        ADB_PATH = data.get("adb_path", ADB_PATH)
+        DEVICE_ID = data.get("device_ID", DEVICE_ID)
+        
+        print(f"✅ 已載入外部設定 (Path: {CONFIG_FILE.resolve()})")
+    except Exception as e:
+        print(f"⚠️ 讀取 config.json 失敗: {e} (將使用預設值)")
+else:
+    print("ℹ️ 找不到 config.json，使用程式內建預設值。")
+
+
 
 
 def get_image_path(filename):

@@ -2,6 +2,7 @@
 import time
 import keyboard
 from . import config
+from typing import Optional, Tuple
 
 
 class GameOps:
@@ -38,7 +39,7 @@ class GameOps:
         print("   🛑 等待畫面靜止...")
         time.sleep(1.5)
 
-    def click_target(self, img_name, off_x=0, off_y=0, timeout=0, threshold=0.8):
+    def click_target(self, img_name, off_x=0, off_y=0, timeout=30, threshold=0.8):
         """
         [升級版] 偵測圖片並點擊 (支援等待模式)
         :param img_name: 圖片檔名
@@ -79,7 +80,7 @@ class GameOps:
             # 4. 還沒超時，休息一下再試 (避免 CPU 飆高)
             time.sleep(1.0)
 
-    def clear_settlement(self, confirm_img, finish_condition_img, max_retry=15, initial_timeout=30):
+    def clear_settlement(self, confirm_img, finish_condition_img, max_retry=30, off_x = 0, off_y = 0):
         """
         [智慧結算 2.0] 
         1. 先等待確認按鈕出現 (避免讀取太久導致次數耗盡)
@@ -90,59 +91,39 @@ class GameOps:
         print(f"🏁 [結算流程] 啟動！等待 {confirm_img} 出現...")
 
         # --- 階段一：等待畫面載入 ---
-        start_wait = time.time()
-        is_ready = False
-        
-        while (time.time() - start_wait) < initial_timeout:
-            screen = self.adb.get_screenshot()
-            if screen is None: continue
-
-            # 1. 檢查是否已經結束了 (防呆：搞不好已經在首頁)
-            is_finished, _ = self.finder.find_and_get_pos(screen, finish_condition_img)
-            if is_finished:
-                print("🎉 一開始就在結束畫面，略過結算。")
-                return True
-
-            # 2. 檢查確認按鈕是否出現
-            has_confirm, _ = self.finder.find_and_get_pos(screen, confirm_img)
-            if has_confirm:
-                print("✅ 結算畫面已載入，開始連續點擊流程！")
-                is_ready = True
-                break # 跳出等待迴圈，進入下面的點擊迴圈
+        #       
+        if self.wait_for_image(confirm_img):
+            print("✅ 結算畫面已載入，開始連續點擊流程！")
             
-            # 還沒出現，繼續等
-            time.sleep(1.0)
-
-        if not is_ready:
-            print(f"⚠️ 等待超時 ({initial_timeout}s)，未偵測到結算畫面或首頁。")
-            return False
 
         # --- 階段二：開始執行點擊 (您的原始邏輯) ---
-        
+
+        screen = self.adb.get_screenshot()
+        _, pos = self.finder.find_and_get_pos(screen, confirm_img)
+        cx = pos[0] + off_x             
+        cy = pos[1] + off_y
+        print(f"   -> 瘋狂點擊確認")      
         for i in range(max_retry):
             screen = self.adb.get_screenshot()
             
-            # 1. 再次檢查結束條件
+            # 點擊確認    
+            is_confire,_= self.finder.find_and_get_pos(screen, confirm_img)
+            if is_confire:
+                self.adb.swipe(cx, cy, cx, cy, 100)
+                time.sleep(1) # 點擊後稍微快一點
+            else:
+                time.sleep(1)
+
+            # 檢查結束條件
             is_finished, _ = self.finder.find_and_get_pos(screen, finish_condition_img)
-            if is_finished:
-                print(f"🎉 結算完成 (共嘗試 {i+1} 次)！")
+            if is_finished:             
                 return True
 
-            # 2. 點擊確認
-            has_confirm, pos = self.finder.find_and_get_pos(screen, confirm_img)
-            if has_confirm:
-                cx, cy = pos
-                print(f"   -> 點擊確認 ({i+1}/{max_retry})")
-                self.adb.tap(cx, cy)
-                time.sleep(0.8) # 點擊後稍微快一點
-            else:
-                print("   ...轉圈圈或切換中...")
-                time.sleep(1.0)
 
         print("⚠️ 警告：超過點擊次數上限，仍未回到首頁")
         return False
     
-    def wait_for_battle_result(self, win_img, lose_img, draw_img, timeout=1200):
+    def wait_for_battle_result(self, win_img, lose_img, draw_img, timeout=1200, win_CONFIDENCE = config.CONFIDENCE):
         """
         [智慧戰鬥監測]
         持續檢查畫面，直到出現結果。
@@ -157,7 +138,7 @@ class GameOps:
             if screen is None: continue
             
             # --- 情況 A: 贏了 (Win) ---
-            is_win, win_pos = self.finder.find_and_get_pos(screen, win_img)
+            is_win, win_pos = self.finder.find_and_get_pos(screen, win_img, win_CONFIDENCE)
             if is_win:
                 cx, cy = win_pos
                 print(f"🎉 偵測到勝利 ({win_img})！座標 ({cx}, {cy}) -> 執行點擊")

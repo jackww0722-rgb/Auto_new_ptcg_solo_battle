@@ -1,0 +1,16 @@
+# Python 編譯檔
+__pycache__/
+*.py[cod]
+
+# 環境變數與設定 (通常含密碼，絕對不能傳)
+.env
+config.ini
+
+
+# 虛擬環境
+venv/
+.venv/
+env/
+
+*.bat
+*.json

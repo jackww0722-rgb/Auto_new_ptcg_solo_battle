@@ -5,7 +5,7 @@ import sys       # 用來強制結束
 from . import config
 from .adb_controller import AdbController
 from .image_finder import ImageFinder
-from .game_ops import GameOps  # <--- 匯入新夥伴
+from .game_ops import GameOps 
 from .state_manager import StateManager
 
 class GameBot:
@@ -78,21 +78,19 @@ class GameBot:
             self.ops.click_target("Auto_on.png", off_x=-231, off_y=-133)
 
             # 3. 戰鬥監測 (呼叫 ops)
-            result = self.ops.wait_for_battle_result("win.png", "lose.png", "draw.png")
+            result = self.ops.wait_for_battle_result("win.png", "lose.png", "draw.png", win_CONFIDENCE=0.4)
 
             # 4. 結算 (呼叫 ops)
             if result == "win":
-                self.ops.clear_settlement("fin_1.png", "fin_2.png")
-                self.ops.clear_settlement("fin_2.png", "fin_3.png")
+                self.ops.clear_settlement("win_1.png", "fin_3.png", off_x=0, off_y=1132)
                 self.ops.click_target("fin_3.png")
                 self.lose_times=0
+                print("===========恭喜通關=============")
             elif result == "lose":
-                self.ops.clear_settlement("fin_1.png", "fin_2.png")
-                self.ops.clear_settlement("fin_2.png", "fin_4.png")
-                self.ops.click_target("fin_4.png")
+                self.ops.clear_settlement("lose.png", "change.png",off_x=0, off_y=1132)
                 self.ops.wait_for_image("change.png")
                 self.lose_times += 1
-                print(f"已失敗{self.lose_times}次")
+                print(f"======死亡計數器{self.lose_times}次=======")
 
 
             else:
@@ -139,7 +137,7 @@ class GameBot:
         found = False
         for _ in range(7): # 最多滑 5 頁
 
-            if self.ops.click_target(target_img):
+            if self.ops.click_target(target_img, timeout = 3):
                 found = True
                 print(f"   ✅ 成功點選 {target_img}")
                 break
@@ -172,7 +170,7 @@ class GameBot:
         found = False
         for _ in range(5): # 最多滑 5 頁
             self.check_stop()
-            if self.ops.click_target(target_img, threshold = strict_threshold):
+            if self.ops.click_target(target_img, timeout = 5,  threshold = strict_threshold):
                 found = True
                 break
             
