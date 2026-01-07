@@ -2,12 +2,14 @@ import subprocess
 import numpy as np
 import cv2
 import os
+import time
 from . import config # 匯入設定檔
 
 class AdbController:
     def __init__(self):
         self.adb_path = config.ADB_PATH
         self.device_id = config.DEVICE_ID
+        self.target_app_package = config.target_app_package
 
     def run_cmd(self, command):
         """ 執行 ADB Shell 指令 """
@@ -44,3 +46,19 @@ class AdbController:
 
     def swipe(self, sx, sy, ex, ey, duration=300):
         self.run_cmd(f"input swipe {sx} {sy} {ex} {ey} {duration}")
+
+    def stop_app(self, package_name = config.target_app_package):
+        cmd = f"am force-stop {package_name}"
+        self.run_cmd(cmd)
+
+    def start_app(self, package_name = config.target_app_package):
+        # 這裡單純送出啟動指令
+        cmd = f"monkey -p {package_name} -c android.intent.category.LAUNCHER 1"
+        self.run_cmd(cmd)
+
+    def restart_app(self, package_name = config.target_app_package):
+        """ [系統] 快速重啟 (殺掉 -> 打開) """
+        print(f"📱 [ADB] 正在重啟 APP: {package_name}")
+        self.stop_app(package_name)
+        time.sleep(3.0) # 系統反應時間
+        self.start_app(package_name)

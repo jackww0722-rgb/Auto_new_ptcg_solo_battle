@@ -1,12 +1,12 @@
 # core/game_ops.py
 import time
 import keyboard
-from . import config
+from . import config, image_finder, adb_controller
 from typing import Optional, Tuple
 
 
 class GameOps:
-    def __init__(self, adb, finder):
+    def __init__(self, adb:adb_controller, finder:image_finder):
         # 接收外部傳進來的手和眼
         self.adb = adb
         self.finder = finder
@@ -18,6 +18,7 @@ class GameOps:
         if keyboard.is_pressed('F12'):
             print("\n🛑 [Ops] 偵測到中斷訊號！")
             raise Exception("Emergency Stop")
+
 
     def swipe_to_bottom(self, count=5):
         """
@@ -39,7 +40,8 @@ class GameOps:
         print("   🛑 等待畫面靜止...")
         time.sleep(1.5)
 
-    def click_target(self, img_name, off_x=0, off_y=0, timeout=30, threshold=0.8):
+
+    def click_target(self, img_name, off_x=0, off_y=0, timeout=30, threshold=0.8):  #等待並點擊
         """
         [升級版] 偵測圖片並點擊 (支援等待模式)
         :param img_name: 圖片檔名
@@ -79,6 +81,7 @@ class GameOps:
 
             # 4. 還沒超時，休息一下再試 (避免 CPU 飆高)
             time.sleep(1.0)
+
 
     def clear_settlement(self, confirm_img, finish_condition_img, max_retry=30, off_x = 0, off_y = 0):
         """
@@ -123,6 +126,7 @@ class GameOps:
         print("⚠️ 警告：超過點擊次數上限，仍未回到首頁")
         return False
     
+
     def wait_for_battle_result(self, win_img, lose_img, draw_img, timeout=1200, win_CONFIDENCE = config.CONFIDENCE):
         """
         [智慧戰鬥監測]
@@ -168,6 +172,7 @@ class GameOps:
         print("⚠️ 戰鬥監測超時")
         return None
     
+
     def wait_for_image(self, target_img, timeout=30):
         """
         [工具] 單純等待某張圖片出現 (不做任何點擊)
@@ -194,3 +199,103 @@ class GameOps:
             
         print(f"   ⚠️ 等待 {target_img} 超時 ({timeout}s)")
         return False
+
+
+    def navigate_back_to_lobby(self):
+        """ [技能] 從標題畫面一路點回大廳 (包含特殊事件等待) """
+        try:
+            print("      👆 [Ops] 正在嘗試從標題畫面回到大廳...")
+            
+            # 1. 檢查標題畫面
+            if not self.wait_for_image("title_screen.png", timeout=60):
+                print("      ❌ 未偵測到標題畫面")
+                return False
+
+            # 2. 點擊進入
+            self.adb.tap(540, 960) 
+            time.sleep(5.0)
+
+            # === 🔥 新增：處理「只能等待」的特殊事件 ===
+            # 設定一個檢查迴圈，假設最多等 2 分鐘 (120秒)
+            wait_limit = 120 
+            start_wait = time.time()
+
+            GRACE_PERIOD = 10  # 秒：等待 B1 出現的寬限期
+            seen_blocking_1 = False
+            b2_first_seen_time = None
+
+            
+            while time.time() - start_wait < wait_limit: #找大廳
+                screenshot = self.adb.get_screenshot()
+
+                has_lobby, _ = self.finder.find_and_get_pos(screenshot, "battle_1.png")
+                has_b1, _ = self.finder.find_and_get_pos(screenshot, "blocking_event.png")
+                has_b2, _ = self.finder.find_and_get_pos(screenshot, "blocking_event_2.png")
+
+                if self.handle_critical_events(screenshot):
+                    continue
+
+                # === 記錄 B1 ===
+                if has_b1:
+                    seen_blocking_1 = True
+                    b2_first_seen_time = None  # 重置
+
+                # === 記錄 B2 首次出現時間 ===
+                if has_b2 and b2_first_seen_time is None:
+                    b2_first_seen_time = time.time()
+
+                # === 情境 2：只有 B1 ===
+                if has_b1 and not has_lobby:
+                    print("⏳ 僅 B1，等待消失")
+                    time.sleep(3)
+                    continue
+
+                # === 情境 3 or 4：B2 + 大廳 ===
+                if has_lobby and has_b2:
+
+                    # 尚未看到 B1 → 等待一小段時間
+                    if not seen_blocking_1:
+                        elapsed = time.time() - b2_first_seen_time
+
+                        if elapsed < GRACE_PERIOD:
+                            print(f"⏳ B2 出現，等待 B1 ({elapsed:.1f}s)")
+                            time.sleep(2)
+                            continue
+                        else:
+                            print("🧠 等不到 B1，判定已結束，放行")
+
+                    # seen_blocking_1 == True 或超時
+                    self.click_target("battle_1.png")
+                    self.click_target("battle_2.png")
+                    return True
+                
+                
+                
+            print("      ❌ 等待超時：無法回到大廳")
+            return False
+
+        except Exception as e:
+            print(f"      ⚠️ [OpsError] 導航過程出錯: {e}")
+            return False
+
+
+    def handle_critical_events(self, screenshot) -> bool:
+        happen_resume_battle,_ = self.finder.find_and_get_pos(screenshot, "resume_battle.png")
+        if happen_resume_battle:
+            print("⚠️ 偵測到續戰事件，取消中")
+            self.click_target("cancel.png")
+            time.sleep(2)
+            return True
+        return False
+
+
+
+
+
+
+
+
+
+
+
+

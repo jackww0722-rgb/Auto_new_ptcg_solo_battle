@@ -33,6 +33,7 @@ STATE_FILE = "bot_state.json"
 # 這裡維持原始字串即可，因為 subprocess 接收字串指令最穩定
 ADB_PATH = r"adb"
 DEVICE_ID = None
+target_app_package = "jp.pokemon.pokemontcgp"
 
 CONFIG_FILE =  ROOT_DIR / "config.json"
 if CONFIG_FILE.exists():
@@ -44,6 +45,7 @@ if CONFIG_FILE.exists():
         # 讀取設定
         ADB_PATH = data.get("adb_path", ADB_PATH)
         DEVICE_ID = data.get("device_ID", DEVICE_ID)
+        target_app_package = data.get("target_app_packet",target_app_package)
         
         print(f"✅ 已載入外部設定 (Path: {CONFIG_FILE.resolve()})")
     except Exception as e:

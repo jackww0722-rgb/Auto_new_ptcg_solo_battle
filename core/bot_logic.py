@@ -39,6 +39,55 @@ class GameBot:
             print("🛑 程式依指令停止運作。")
             # 拋出一個自訂錯誤，讓程式直接跳到 main 的 except 區塊
             raise Exception("Emergency Stop")
+ 
+
+    def recover_game_state(self, max_retries=3):
+        """ 
+        [SOP] 執行完整的錯誤恢復流程 (包含重試機制)
+        :param max_retries: 最大重試次數，預設 3 次
+        """
+        print(f"\n🚑 啟動緊急救援 SOP (最大嘗試次數: {max_retries})")
+
+        for i in range(max_retries):
+            current_attempt = i + 1
+            print(f"   🔄 [救援嘗試 {current_attempt}/{max_retries}] 執行中...")
+
+            try:
+                # 步驟 1: 強制殺掉並重啟 APP (ADB層)
+                # (注意：這裡不需要 try-except，因為如果連 ADB 都掛了，通常重試也沒用)
+                self.adb.restart_app()
+                
+                # 步驟 2: 等待遊戲啟動 (Bot層決定時間)
+                # 第一次可能等 30 秒，如果不幸失敗重試，後幾次可以多等一點 (30 + i*10)
+                wait_time = 30 + (i * 10)
+                print(f"      ⏳ 等待遊戲載入 ({wait_time}秒)...")
+                time.sleep(float(wait_time))
+
+                # 步驟 3: 嘗試導航回大廳 (Ops層)
+                # navigate_back_to_lobby 應該要回傳 True(成功) 或 False(失敗)
+                if self.ops.navigate_back_to_lobby():
+                    print(f"   ✨ [救援成功] 在第 {current_attempt} 次嘗試成功回到大廳！")
+                    return True  # ✅ 成功救回來了，結束這個函式
+                else:
+                    print(f"      ❌ [失敗] 導航回大廳失敗 (找不到圖或超時)")
+                    # 這裡不 return，讓迴圈跑下一次 (也就是再重開一次遊戲)
+
+            except Exception as e:
+                # 捕捉所有「預期外」的錯誤 (例如截圖失敗、記憶體不足...)
+                print(f"      ⚠️ [異常] 救援過程發生未預期錯誤: {e}")
+                # 也不 return，讓迴圈跑下一次
+
+            # 如果還沒達到最後一次，就稍微冷靜一下再重試
+            if current_attempt < max_retries:
+                print("      ♻️ 準備進行下一次重啟嘗試...")
+                time.sleep(5.0)
+
+        # === 如果跑完 for 迴圈都沒有 return True ===
+        # 代表救了 3 次都失敗，這時候才真的拋出絕望的錯誤
+        print(f"💀 [救援失敗] 已重試 {max_retries} 次仍無法恢復，程式終止。")
+        raise Exception("Fatal Error: Game Recovery Failed")
+
+
 
     # ============================
     # 🎵 第一部分：主旋律
@@ -82,8 +131,8 @@ class GameBot:
 
             # 4. 結算 (呼叫 ops)
             if result == "win":
-                self.ops.clear_settlement("win_1.png", "fin_3.png", off_x=0, off_y=1132)
-                self.ops.click_target("fin_3.png")
+                self.ops.clear_settlement("win_1.png", "win_fin.png", off_x=0, off_y=1132)
+                self.ops.click_target("win_fin.png")
                 self.lose_times=0
                 print("===========恭喜通關=============")
             elif result == "lose":
@@ -159,8 +208,6 @@ class GameBot:
         """ [動作] 切換難度 """
         print(f"🔄 正在切換難度目標: {diff_img}")
 
-        self.ops.click_target("back.png")
-
         self.ops.wait_for_image("diff_1.png")
 
         target_img = diff_img
@@ -211,25 +258,66 @@ class GameBot:
             print(f"📢 進入難度 {d_idx + 1} / {len(config.DIFFICULTY_LIST)}")
             print(f"📢 ===========================\n")
 
-            self.switch_difficulty(diff_img)
+            try:
+                self.switch_difficulty(diff_img)
+
+            except Exception as e:
+                print(f"⚠️ 難度切換失敗 ({e})，嘗試救援...")
+                self.recover_game_state()     # 重開並回到大廳
+                self.switch_difficulty(diff_img) # 再試一次切換
+
+                #self.restart_game()
+
+            
             current_start_n = start_pkg_n if d_idx == start_diff_idx else 1
 
-            for n in range(current_start_n, config.TOTAL_PACKAGES + 1):
+            while current_start_n < config.TOTAL_PACKAGES + 1:
                 self.check_stop()
-
-                print(f"\n=== 執行第 {n-1} 號目標 ===")
+                try:
+                    print(f"\n=== 執行第 {current_start_n - 1} 號目標 ===")
             
                 
-                self.run_main_theme()
+                    self.run_main_theme()
+                
+                    self.check_stop()
+
+                    self.run_interlude(n=current_start_n)
+
+                    self.state_mgr.save_state(d_idx, current_start_n + 1)
+
+                    current_start_n += 1
+                    
+                except Exception as e:
+                    # === 🔥 發生意外 (斷線、閃退、卡住) ===
+                    error_msg = str(e)
+
+                    # A. 如果是手動停止 -> 直接結束
+                    if "Emergency Stop" in error_msg:
+                        print("🛑 使用者強制停止。")
+                        return
+
+                    # B. 其他錯誤 -> 啟動 SOP
+                    print(f"⚠️ 發生錯誤: {error_msg}")
+                    print("♻️ 執行救援 SOP...")
+                    
+                    # 步驟 1: 重開遊戲 + 回到大廳 (我們剛剛寫好的功能)
+                    self.recover_game_state()
+
+                    
+                    # 步驟 2: 確保難度正確
+                    # (因為重開後預設可能是別的難度，保險起見再切一次)
+                    try:
+                        self.switch_difficulty(diff_img)
+                    except:
+                        pass # 如果已經在該難度可能會報錯，忽略之
+
+                    print(f"🔄 狀態已恢復，準備重試第 {n} 關...")
+                    time.sleep(3)
+                    # 這裡沒有 n+=1，所以迴圈會自動重打這一關
+
+            self.ops.click_target("back.png")
             
-                self.check_stop()
-
-                self.run_interlude(n)
-
-                self.state_mgr.save_state(d_idx, n + 1)
-
-            
-            print(f"🎉 全部 {config.TOTAL_PACKAGES} 輪執行完畢，腳本結束！")
+            print(f"🎉 {config.TOTAL_PACKAGES} 包攻略完畢，切換難度！")
 
             # 重置存檔：準備進入「下一個難度，第 1 關」
             # 這樣如果在這裡斷掉，下次會從下個難度開頭開始
