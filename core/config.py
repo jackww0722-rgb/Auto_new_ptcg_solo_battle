@@ -34,6 +34,9 @@ STATE_FILE = "bot_state.json"
 ADB_PATH = r"adb"
 DEVICE_ID = None
 target_app_package = "jp.pokemon.pokemontcgp"
+MANAGER_PATH = Path("")
+EMULATOR_TYPE = "ldplayer"
+EMULATOR_INDEX = "0"
 
 CONFIG_FILE =  ROOT_DIR / "config.json"
 if CONFIG_FILE.exists():
@@ -46,6 +49,13 @@ if CONFIG_FILE.exists():
         ADB_PATH = data.get("adb_path", ADB_PATH)
         DEVICE_ID = data.get("device_ID", DEVICE_ID)
         target_app_package = data.get("target_app_packet",target_app_package)
+
+        EMULATOR_TYPE = data.get("emulator_type", "ldplayer").lower()
+        EMULATOR_INDEX = str(data.get("emulator_index", 0))
+        
+        # 轉為 Path 物件以便操作
+        if data.get("manager_path"):
+            MANAGER_PATH = Path(data.get("manager_path"))
         
         print(f"✅ 已載入外部設定 (Path: {CONFIG_FILE.resolve()})")
     except Exception as e:

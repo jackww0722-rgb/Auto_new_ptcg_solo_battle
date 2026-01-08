@@ -1,8 +1,16 @@
 # core/game_ops.py
 import time
 import keyboard
+from dataclasses import dataclass
 from . import config, image_finder, adb_controller
 from typing import Optional, Tuple
+
+@dataclass
+class CriticalEvent:
+    trigger_img: str
+    action_img: str
+    desc: str
+
 
 
 class GameOps:
@@ -10,6 +18,21 @@ class GameOps:
         # 接收外部傳進來的手和眼
         self.adb = adb
         self.finder = finder
+
+
+
+    CRITICAL_EVENTS = [
+            CriticalEvent(
+                trigger_img="resume_battle.png",
+                action_img="resume_battle_cancel.png",
+                desc="取消續戰",
+            ),
+            CriticalEvent(
+                trigger_img="UI_error.png",
+                action_img="UI_error_cancel.png",
+                desc="模擬器 UI 錯誤",
+            ),
+        ]
 
     # --- 基礎工具 ---
 
@@ -101,18 +124,12 @@ class GameOps:
 
         # --- 階段二：開始執行點擊 (您的原始邏輯) ---
 
-        screen = self.adb.get_screenshot()
-        _, pos = self.finder.find_and_get_pos(screen, confirm_img)
-        cx = pos[0] + off_x             
-        cy = pos[1] + off_y
         print(f"   -> 瘋狂點擊確認")      
         for i in range(max_retry):
             screen = self.adb.get_screenshot()
             
             # 點擊確認    
-            is_confire,_= self.finder.find_and_get_pos(screen, confirm_img)
-            if is_confire:
-                self.adb.swipe(cx, cy, cx, cy, 100)
+            if self.click_target(confirm_img):
                 time.sleep(1) # 點擊後稍微快一點
             else:
                 time.sleep(1)
@@ -142,13 +159,9 @@ class GameOps:
             if screen is None: continue
             
             # --- 情況 A: 贏了 (Win) ---
-            is_win, win_pos = self.finder.find_and_get_pos(screen, win_img, win_CONFIDENCE)
-            if is_win:
-                cx, cy = win_pos
-                print(f"🎉 偵測到勝利 ({win_img})！座標 ({cx}, {cy}) -> 執行點擊")
-                
-                # 關鍵動作：贏了就點下去！
-                self.adb.tap(cx, cy)
+
+            if self.click_target(img_name = win_img, timeout = 5, threshold =win_CONFIDENCE): # 關鍵動作：贏了就點下去！
+                print(f"🎉 偵測到勝利 ({win_img})！")                                
                 time.sleep(1.0) # 點完稍微等一下，確保遊戲接收到
                 
                 return "win"
@@ -280,12 +293,13 @@ class GameOps:
 
 
     def handle_critical_events(self, screenshot) -> bool:
-        happen_resume_battle,_ = self.finder.find_and_get_pos(screenshot, "resume_battle.png")
-        if happen_resume_battle:
-            print("⚠️ 偵測到續戰事件，取消中")
-            self.click_target("cancel.png")
-            time.sleep(2)
-            return True
+        for event in self.CRITICAL_EVENTS:
+            happen_error,_ = self.finder.find_and_get_pos(screenshot, event.trigger_img, threshold=0.5)
+            if happen_error:
+                print(f"⚠️ 偵測到{event.desc}")
+                self.click_target(event.action_img)
+                time.sleep(2)
+                return True
         return False
 
 

@@ -7,6 +7,7 @@ from .adb_controller import AdbController
 from .image_finder import ImageFinder
 from .game_ops import GameOps 
 from .state_manager import StateManager
+from .debugger import CrashReporter
 
 class GameBot:
     def __init__(self):
@@ -14,10 +15,11 @@ class GameBot:
         self.finder = ImageFinder()
         self.lose_times = 0
         
+        
         # 初始化操作庫 (把手眼交給它)
         self.ops = GameOps(self.adb, self.finder)
         self.state_mgr = StateManager()
-        
+        self.reporter = CrashReporter(self.adb)
         # --- 2. 緊急停止設定 ---
         self.is_running = True  # 旗標：預設為「跑動中」
         
@@ -41,10 +43,10 @@ class GameBot:
             raise Exception("Emergency Stop")
  
 
-    def recover_game_state(self, max_retries=3):
+    def recover_game_state(self, max_retries=5):
         """ 
         [SOP] 執行完整的錯誤恢復流程 (包含重試機制)
-        :param max_retries: 最大重試次數，預設 3 次
+        :param max_retries: 最大重試次數，預設 5 次
         """
         print(f"\n🚑 啟動緊急救援 SOP (最大嘗試次數: {max_retries})")
 
@@ -55,11 +57,14 @@ class GameBot:
             try:
                 # 步驟 1: 強制殺掉並重啟 APP (ADB層)
                 # (注意：這裡不需要 try-except，因為如果連 ADB 都掛了，通常重試也沒用)
-                self.adb.restart_app()
-                
+                if current_attempt < max_retries:
+                    self.adb.restart_app()
+                else:
+                    self.adb.restart_emulator()
+                    self.adb.restart_app()
+
                 # 步驟 2: 等待遊戲啟動 (Bot層決定時間)
-                # 第一次可能等 30 秒，如果不幸失敗重試，後幾次可以多等一點 (30 + i*10)
-                wait_time = 30 + (i * 10)
+                wait_time = 300
                 print(f"      ⏳ 等待遊戲載入 ({wait_time}秒)...")
                 time.sleep(float(wait_time))
 
@@ -85,6 +90,8 @@ class GameBot:
         # === 如果跑完 for 迴圈都沒有 return True ===
         # 代表救了 3 次都失敗，這時候才真的拋出絕望的錯誤
         print(f"💀 [救援失敗] 已重試 {max_retries} 次仍無法恢復，程式終止。")
+
+
         raise Exception("Fatal Error: Game Recovery Failed")
 
 
@@ -245,6 +252,7 @@ class GameBot:
         state = self.state_mgr.load_state()
         start_diff_idx = state["diff_index"]
         start_pkg_n = state["package_n"]
+        self.adb.wait_for_device_boot()
 
         print(f"📂 讀取存檔: 從 [難度 {start_diff_idx+1}] 的 [第 {start_pkg_n} 關] 開始")
         
@@ -299,7 +307,7 @@ class GameBot:
                     # B. 其他錯誤 -> 啟動 SOP
                     print(f"⚠️ 發生錯誤: {error_msg}")
                     print("♻️ 執行救援 SOP...")
-                    
+                    self.reporter.save_report(e, context=f"Diff_{d_idx}_Level_{current_start_n}")
                     # 步驟 1: 重開遊戲 + 回到大廳 (我們剛剛寫好的功能)
                     self.recover_game_state()
 
@@ -311,7 +319,7 @@ class GameBot:
                     except:
                         pass # 如果已經在該難度可能會報錯，忽略之
 
-                    print(f"🔄 狀態已恢復，準備重試第 {n} 關...")
+                    print(f"🔄 狀態已恢復，準備重試第 {current_start_n} 關...")
                     time.sleep(3)
                     # 這裡沒有 n+=1，所以迴圈會自動重打這一關
 
