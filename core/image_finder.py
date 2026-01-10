@@ -58,3 +58,42 @@ class ImageFinder:
             return True, (center_x, center_y)
             
         return False, None
+    
+    def find_text_button(self, screen, template_name, threshold=0.7):
+        """
+        [專門找文字] 使用二值化 (Binarization) 處理
+        這能有效解決「字體顏色太淡」或「背景半透明」的問題
+        """
+        # 1. 讀取模板 (強制轉灰階)
+        template_path = config.ASSETS_DIR / template_name
+        if not template_path.exists():
+            print(f"❌ 找不到模板: {template_name}")
+            return False, None
+            
+        template = cv2.imread(str(template_path), cv2.IMREAD_GRAYSCALE)
+        
+        # 2. 將螢幕截圖也轉灰階
+        screen_gray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
+
+        # === 🔥 關鍵魔法：二值化處理 ===
+        # 設定一個切分點 (例如 180)，低於這個亮度(字體)變 255(白)，高於這個亮度(背景)變 0(黑)
+        # THRESH_BINARY_INV 代表「反向」，讓深色字體變亮，淺色背景變暗
+        _, screen_bin = cv2.threshold(screen_gray, 180, 255, cv2.THRESH_BINARY_INV)
+        _, template_bin = cv2.threshold(template, 180, 255, cv2.THRESH_BINARY_INV)
+
+        # (Debug用) 如果您想看處理完長怎樣，可以把這行打開存下來看
+        # cv2.imwrite(f"debug_bin_{template_name}", screen_bin)
+
+        # 3. 進行匹配
+        result = cv2.matchTemplate(screen_bin, template_bin, cv2.TM_CCOEFF_NORMED)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+
+        if max_val >= threshold:
+            # 計算中心點
+            h, w = template.shape
+            center_x = max_loc[0] + w // 2
+            center_y = max_loc[1] + h // 2
+            print(f"   🔍 [TextMode] 找到 {template_name} (信心度: {max_val:.2f})")
+            return True, (center_x, center_y)
+        else:
+            return False, None

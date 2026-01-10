@@ -64,7 +64,7 @@ class GameBot:
                     self.adb.restart_app()
 
                 # 步驟 2: 等待遊戲啟動 (Bot層決定時間)
-                wait_time = 300
+                wait_time = 30
                 print(f"      ⏳ 等待遊戲載入 ({wait_time}秒)...")
                 time.sleep(float(wait_time))
 
@@ -138,12 +138,14 @@ class GameBot:
 
             # 4. 結算 (呼叫 ops)
             if result == "win":
-                self.ops.clear_settlement("win_1.png", "win_fin.png", off_x=0, off_y=1132)
+                self.ops.clear_settlement("fin_1.png", "fin_2.png", finish_CONFIDENCE = 0.7)
+                self.ops.click_target("fin_2.png", threshold = 0.4)
                 self.ops.click_target("win_fin.png")
-                self.lose_times=0
+                self.lose_times = 0
                 print("===========恭喜通關=============")
             elif result == "lose":
-                self.ops.clear_settlement("lose.png", "change.png",off_x=0, off_y=1132)
+                self.ops.clear_settlement("fin_1.png", "fin_2.png", finish_CONFIDENCE = 0.7)
+                self.ops.click_target("fin_2.png", threshold = 0.4) 
                 self.ops.wait_for_image("change.png")
                 self.lose_times += 1
                 print(f"======死亡計數器{self.lose_times}次=======")
@@ -169,7 +171,7 @@ class GameBot:
         
         # 1. 點擊 "change.png"
         # 這裡假設一定要點到，所以設一點 timeout
-        if not self.ops.click_target("change.png", timeout=5):
+        if not self.ops.click_target("change.png", timeout=5, threshold=0.4):
             raise Exception("⚠️ 找不到 change 按鈕，跳過間奏")
 
         time.sleep(2.0) # 等待切換介面

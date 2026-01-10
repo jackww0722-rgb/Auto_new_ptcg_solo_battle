@@ -106,7 +106,7 @@ class GameOps:
             time.sleep(1.0)
 
 
-    def clear_settlement(self, confirm_img, finish_condition_img, max_retry=30, off_x = 0, off_y = 0):
+    def clear_settlement(self, confirm_img, finish_condition_img, max_retry=30, off_x = 0, off_y = 0, finish_CONFIDENCE = 0.8):
         """
         [智慧結算 2.0] 
         1. 先等待確認按鈕出現 (避免讀取太久導致次數耗盡)
@@ -135,7 +135,7 @@ class GameOps:
                 time.sleep(1)
 
             # 檢查結束條件
-            is_finished, _ = self.finder.find_and_get_pos(screen, finish_condition_img)
+            is_finished, _ = self.finder.find_text_button(screen, finish_condition_img, threshold = finish_CONFIDENCE)
             if is_finished:             
                 return True
 
@@ -220,12 +220,12 @@ class GameOps:
             print("      👆 [Ops] 正在嘗試從標題畫面回到大廳...")
             
             # 1. 檢查標題畫面
-            if not self.wait_for_image("title_screen.png", timeout=60):
+            if not self.click_target("title_screen.png", timeout=300):
                 print("      ❌ 未偵測到標題畫面")
                 return False
 
             # 2. 點擊進入
-            self.adb.tap(540, 960) 
+            
             time.sleep(5.0)
 
             # === 🔥 新增：處理「只能等待」的特殊事件 ===
@@ -241,7 +241,7 @@ class GameOps:
             while time.time() - start_wait < wait_limit: #找大廳
                 screenshot = self.adb.get_screenshot()
 
-                has_lobby, _ = self.finder.find_and_get_pos(screenshot, "battle_1.png")
+                has_lobby, _ = self.finder.find_and_get_pos(screenshot, "battle_1.png", threshold=0.5)
                 has_b1, _ = self.finder.find_and_get_pos(screenshot, "blocking_event.png")
                 has_b2, _ = self.finder.find_and_get_pos(screenshot, "blocking_event_2.png")
 
@@ -278,7 +278,7 @@ class GameOps:
                             print("🧠 等不到 B1，判定已結束，放行")
 
                     # seen_blocking_1 == True 或超時
-                    self.click_target("battle_1.png")
+                    self.click_target("battle_1.png", threshold=0.5)
                     self.click_target("battle_2.png")
                     return True
                 
