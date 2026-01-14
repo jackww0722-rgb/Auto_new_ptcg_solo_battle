@@ -106,7 +106,7 @@ class GameOps:
             time.sleep(1.0)
 
 
-    def clear_settlement(self, confirm_img, finish_condition_img, max_retry=30, off_x = 0, off_y = 0, finish_CONFIDENCE = 0.8):
+    def clear_settlement(self, confirm_img, finish_condition_img, max_retry=30, finish_CONFIDENCE = 0.8):
         """
         [智慧結算 2.0] 
         1. 先等待確認按鈕出現 (避免讀取太久導致次數耗盡)
@@ -239,11 +239,20 @@ class GameOps:
 
             
             while time.time() - start_wait < wait_limit: #找大廳
+                print("正在尋找大廳...")
                 screenshot = self.adb.get_screenshot()
 
-                has_lobby, _ = self.finder.find_and_get_pos(screenshot, "battle_1.png", threshold=0.5)
+                has_lobby, lobby_pos = self.finder.find_text_button(screenshot, "battle_1.png")
                 has_b1, _ = self.finder.find_and_get_pos(screenshot, "blocking_event.png")
                 has_b2, _ = self.finder.find_and_get_pos(screenshot, "blocking_event_2.png")
+
+                # === 情境 1：什麼問題都沒有 直接進戰鬥流程 ===
+                if has_lobby and not has_b2:
+                    while not self.wait_for_image("battle_2.png"):
+                        self.adb.tap(lobby_pos[0], lobby_pos[1])
+                    self.click_target("battle_2.png")
+                    return True
+                
 
                 if self.handle_critical_events(screenshot):
                     continue
@@ -278,7 +287,8 @@ class GameOps:
                             print("🧠 等不到 B1，判定已結束，放行")
 
                     # seen_blocking_1 == True 或超時
-                    self.click_target("battle_1.png", threshold=0.5)
+                    while not self.wait_for_image("battle_2.png"):
+                        self.adb.tap(lobby_pos[0], lobby_pos[1])
                     self.click_target("battle_2.png")
                     return True
                 

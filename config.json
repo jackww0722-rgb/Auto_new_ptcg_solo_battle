@@ -1,0 +1,8 @@
+{
+    "emulator_type": "MUMU", 
+    "emulator_index": 0,
+    "manager_path": "D:\\Program Files\\Netease\\MuMuPlayer\\nx_main\\MuMuManager.exe",
+    "adb_path": "D:\\Program Files\\Netease\\MuMuPlayer\\nx_main\\adb.exe",
+    "device_ID": "127.0.0.1:7555",
+    "target_app_package": "jp.pokemon.pokemontcgp"
+}

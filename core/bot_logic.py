@@ -284,14 +284,13 @@ class GameBot:
             while current_start_n < config.TOTAL_PACKAGES + 1:
                 self.check_stop()
                 try:
-                    print(f"\n=== 執行第 {current_start_n - 1} 號目標 ===")
-            
+                    print(f"\n=== 執行第 {current_start_n} 號目標 ===")
+
+                    self.run_interlude(n=current_start_n)
                 
                     self.run_main_theme()
                 
                     self.check_stop()
-
-                    self.run_interlude(n=current_start_n)
 
                     self.state_mgr.save_state(d_idx, current_start_n + 1)
 

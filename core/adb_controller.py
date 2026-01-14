@@ -101,48 +101,6 @@ class AdbController:
     # ==========================================
     # 模擬器控制模組 (Hard Reboot)
     # ==========================================
-    def restart_emulator(self):
-        """ [模擬器] 暴力重啟 (LDPlayer / MuMu) """
-        manager = config.MANAGER_PATH
-        idx = config.EMULATOR_INDEX
-        etype = config.EMULATOR_TYPE
-
-        if not manager.exists():
-            print("❌ 無法重啟：設定檔中的 manager_path 無效")
-            return
-
-        print(f"💀 [System] 執行模擬器重啟 (Type: {etype} | Index: {idx})...")
-
-        try:
-            cmd_quit = []
-            cmd_open = []
-
-            # 根據 config 決定語法
-            if etype == "ldplayer":
-                cmd_quit = [str(manager), "quit", "--index", idx]
-                cmd_open = [str(manager), "launch", "--index", idx]
-            elif etype == "mumu":
-                cmd_quit = [str(manager), "close_player", "-i", idx]
-                cmd_open = [str(manager), "launch_player", "-i", idx]
-            else:
-                print(f"❌ 未支援的模擬器類型: {etype}")
-                return
-
-            # 1. 關閉模擬器
-            print(f"   💤 正在關閉模擬器...")
-            subprocess.run(cmd_quit, shell=True, check=True)
-            time.sleep(5.0) 
-
-            # 2. 啟動模擬器
-            print(f"   🚀 正在啟動模擬器...")
-            subprocess.run(cmd_open, shell=True, check=True)
-            
-            # 3. 等待 ADB 連線
-            self.wait_for_device_boot()
-
-        except Exception as e:
-            print(f"❌ 模擬器重啟失敗: {e}")
-
     def wait_for_device_boot(self, timeout=600):
         """ 等待 ADB 重新連線成功 """
         print("   ⏳ 等待 Android 系統啟動中...")
@@ -167,4 +125,117 @@ class AdbController:
             time.sleep(2)
 
         print("   ⚠️ 等待模擬器啟動超時")
-        return False
+        return False  
+
+    def _force_kill_emulator_process(self):
+        """
+        [核彈級] 強制獵殺模擬器行程
+        當 Manager 卡死時，直接用 Windows 系統指令殺掉所有相關行程
+        """
+        etype = config.EMULATOR_TYPE
+        print(f"🔪 [System] 偵測到模擬器/Manager 卡死，執行強制獵殺程序 ({etype})...")
+
+        # 定義要獵殺的目標 (依據不同模擬器)
+        # /F = 強制終止
+        # /IM = 指定映像名稱
+        # /T = 終止子行程 (斬草除根)
+        
+        targets = []
+        if etype == "mumu":
+            # MuMu 12 常見的行程名稱
+            targets = [
+                "MuMuManager.exe",    # 管理器
+                "MuMuPlayer.exe",     # 模擬器主體
+                "NemuHeadless.exe",   # 背景核心
+                "NemuPlayer.exe"      # 舊版或相容行程
+            ]
+        elif etype == "ldplayer":
+            # 雷電常見行程
+            targets = [
+                "dnplayer.exe",       # 雷電主體
+                "ldconsole.exe",      # 控制台
+                "LdBoxHeadless.exe"
+            ]
+
+        # 執行獵殺
+        for process in targets:
+            try:
+                # 使用 DEVNULL 讓它安靜地殺，不要噴錯誤訊息 (例如行程原本就沒跑的時候)
+                subprocess.run(
+                    f"taskkill /F /IM {process} /T", 
+                    shell=True, 
+                    stdout=subprocess.DEVNULL, 
+                    stderr=subprocess.DEVNULL
+                )
+            except Exception:
+                pass
+        
+        print("   ✅ 戰場清理完畢，等待冷卻...")
+        time.sleep(3.0) # 殺完之後稍微等一下，讓 Windows 釋放資源
+
+    def restart_emulator(self):
+        """ [模擬器] 暴力重啟 (包含防卡死機制) """
+        manager = config.MANAGER_PATH
+        idx = config.EMULATOR_INDEX
+        etype = config.EMULATOR_TYPE
+
+        # ... (中間省略權限檢查與變數定義) ...
+        # ... (請保留您原本的 env 設定) ...
+        env = os.environ.copy()
+        env["__COMPAT_LAYER"] = "RunAsInvoker"
+
+        print(f"💀 [System] 執行模擬器重啟 (Type: {etype} | Index: {idx})...")
+
+        try:
+            # === 1. 嘗試「溫柔關閉」 ===
+            # 先試著用正規指令關閉，但加上 timeout 防止卡死
+            print(f"   💤 嘗試正常關閉模擬器...")
+            
+            cmd_quit = ""
+            if etype == "mumu":
+                cmd_quit = f'"{manager}" control -i {idx} -c shutdown'
+            elif etype == "ldplayer":
+                cmd_quit = f'"{manager}" quit --index {idx}'
+
+            try:
+                # 🔥 關鍵：設定 timeout=5秒
+                # 如果 Manager 5秒內沒回應，就當作它卡死了
+                subprocess.run(
+                    cmd_quit, 
+                    shell=True, 
+                    env=env,
+                    timeout=5,  # 👈 超時設定
+                    stdout=subprocess.DEVNULL, 
+                    stderr=subprocess.DEVNULL
+                )
+            except subprocess.TimeoutExpired:
+                print("   ⚠️ 正常關閉超時 (Manager 可能卡死)")
+                # 這裡不需要做什麼，因為下面會檢查 process 並執行強制獵殺
+
+            # === 2. 檢查並執行「強制獵殺」 ===
+            # 不管上面有沒有成功，我們直接呼叫獵殺函式來確保乾淨
+            # 或者是您可以寫邏輯判斷，但為了穩定，重啟時強制殺一次通常最保險
+            self._force_kill_emulator_process()
+
+            # === 3. 重新啟動 ===
+            print(f"   🚀 正在啟動模擬器...")
+            cmd_open = ""
+            if etype == "mumu":
+                cmd_open = f'"{manager}" control -i {idx} -c launch'
+            elif etype == "ldplayer":
+                cmd_open = f'"{manager}" launch --index {idx}'
+
+            subprocess.run(
+                cmd_open, 
+                shell=True, 
+                check=True,
+                env=env,
+                stdout=subprocess.DEVNULL, 
+                stderr=subprocess.DEVNULL
+            )
+            
+            # 4. 等待 ADB 連線
+            self.wait_for_device_boot()
+
+        except Exception as e:
+            print(f"❌ 模擬器重啟失敗: {e}")
