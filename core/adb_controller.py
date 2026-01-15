@@ -7,10 +7,10 @@ import time
 from . import config # 匯入設定檔
 
 class AdbController:
-    def __init__(self):
-        self.adb_path = config.ADB_PATH
-        self.device_id = config.DEVICE_ID
-        self.target_app_package = config.target_app_package
+    def __init__(self, adb_path, device_id, target_app_package):
+        self.adb_path = adb_path
+        self.device_id = device_id
+        self.target_app_package = target_app_package
 
     def run_cmd(self, command):
         """ 

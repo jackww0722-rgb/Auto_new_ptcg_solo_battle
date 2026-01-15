@@ -8,41 +8,24 @@ from .image_finder import ImageFinder
 from .game_ops import GameOps 
 from .state_manager import StateManager
 from .debugger import CrashReporter
+from .run_state import RunState
 
 class GameBot:
     def __init__(self):
-        self.adb = AdbController()
+
+        self.adb = AdbController(adb_path=config.ADB_PATH,
+            device_id=config.DEVICE_ID, 
+            target_app_package=config.target_app_package)
+
         self.finder = ImageFinder()
+        self.state=RunState()
         self.lose_times = 0
         
-        
         # 初始化操作庫 (把手眼交給它)
-        self.ops = GameOps(self.adb, self.finder)
+        self.ops = GameOps(self.adb, self.finder, self.state)
         self.state_mgr = StateManager()
         self.reporter = CrashReporter(self.adb)
-        # --- 2. 緊急停止設定 ---
-        self.is_running = True  # 旗標：預設為「跑動中」
-        
-        # 設定 F12 為緊急停止鍵 (您可以改成其他鍵，如 'q', 'esc')
-        print("🛡️ 緊急停止監聽中... (隨時按下 F12 可終止程式)")
-        keyboard.add_hotkey('F12', self.emergency_stop)
     
-    def emergency_stop(self):
-        """ 當按下 F12 時會觸發此函式 """
-        print("\n\n🛑 !!! 緊急停止觸發 (USER STOP) !!! 🛑")
-        self.is_running = False  # 關閉旗標
-
-    def check_stop(self):
-        """ 
-        [檢查點] 在做大事之前呼叫這個
-        如果發現旗標已經變成 False，就拋出例外結束程式 
-        """
-        if not self.is_running:
-            print("🛑 程式依指令停止運作。")
-            # 拋出一個自訂錯誤，讓程式直接跳到 main 的 except 區塊
-            raise Exception("Emergency Stop")
- 
-
     def recover_game_state(self, max_retries=5):
         """ 
         [SOP] 執行完整的錯誤恢復流程 (包含重試機制)
@@ -107,6 +90,9 @@ class GameBot:
         
         # 2. 找圖
         screen = self.adb.get_screenshot()
+        in_lobby, _ = self.finder.find_and_get_pos(screen, "change.png")
+        if not in_lobby:
+            raise Exception("沒有回到關卡選擇畫面")      
         found, pos = self.finder.find_and_get_pos(screen, "unclear.png")
         
         if found:
@@ -119,14 +105,14 @@ class GameBot:
         has_played = False
         
         while True:
-            self.check_stop()
+            self.state.check_stop()
             # 1. 找任務
             if not self.solve_unclear_mission():
                 break # 沒任務了，主旋律結束
             
             has_played = True
             print("   ⚔️ 進入戰鬥流程...")
-            time.sleep(10)
+            time.sleep(5)
 
             # 2. 戰鬥設定 (呼叫 ops)
             self.ops.click_target("Auto_off.png")
@@ -225,7 +211,7 @@ class GameBot:
         
         found = False
         for _ in range(5): # 最多滑 5 頁
-            self.check_stop()
+            self.state.check_stop()
             if self.ops.click_target(target_img, timeout = 5,  threshold = strict_threshold):
                 found = True
                 break
@@ -256,7 +242,7 @@ class GameBot:
         start_pkg_n = state["package_n"]
         self.adb.wait_for_device_boot()
 
-        print(f"📂 讀取存檔: 從 [難度 {start_diff_idx+1}] 的 [第 {start_pkg_n} 關] 開始")
+        print(f"📂 讀取存檔: 從 [難度 {start_diff_idx+1}] 的 [第 {start_pkg_n+1} 關] 開始")
         
         # 直接讀取 config 裡的數字來跑迴圈
         for d_idx, diff_img in enumerate(config.DIFFICULTY_LIST):
@@ -279,10 +265,10 @@ class GameBot:
                 #self.restart_game()
 
             
-            current_start_n = start_pkg_n if d_idx == start_diff_idx else 1
+            current_start_n = start_pkg_n - 1 if d_idx == start_diff_idx else 1
 
             while current_start_n < config.TOTAL_PACKAGES + 1:
-                self.check_stop()
+                self.state.check_stop()
                 try:
                     print(f"\n=== 執行第 {current_start_n} 號目標 ===")
 
@@ -290,9 +276,9 @@ class GameBot:
                 
                     self.run_main_theme()
                 
-                    self.check_stop()
+                    self.state.check_stop()
 
-                    self.state_mgr.save_state(d_idx, current_start_n + 1)
+                    self.state_mgr.save_state(d_idx, current_start_n)
 
                     current_start_n += 1
                     
@@ -300,12 +286,7 @@ class GameBot:
                     # === 🔥 發生意外 (斷線、閃退、卡住) ===
                     error_msg = str(e)
 
-                    # A. 如果是手動停止 -> 直接結束
-                    if "Emergency Stop" in error_msg:
-                        print("🛑 使用者強制停止。")
-                        return
-
-                    # B. 其他錯誤 -> 啟動 SOP
+                    # 錯誤 -> 啟動 SOP
                     print(f"⚠️ 發生錯誤: {error_msg}")
                     print("♻️ 執行救援 SOP...")
                     self.reporter.save_report(e, context=f"Diff_{d_idx}_Level_{current_start_n}")

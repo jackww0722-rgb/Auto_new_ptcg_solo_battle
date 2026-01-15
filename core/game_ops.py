@@ -2,7 +2,10 @@
 import time
 import keyboard
 from dataclasses import dataclass
-from . import config, image_finder, adb_controller
+from . import config
+from .image_finder import ImageFinder
+from .adb_controller import AdbController
+from .run_state import RunState
 from typing import Optional, Tuple
 
 @dataclass
@@ -11,13 +14,12 @@ class CriticalEvent:
     action_img: str
     desc: str
 
-
-
 class GameOps:
-    def __init__(self, adb:adb_controller, finder:image_finder):
+    def __init__(self, adb:AdbController, finder:ImageFinder, run_state:RunState):
         # 接收外部傳進來的手和眼
         self.adb = adb
         self.finder = finder
+        self.state = run_state
 
 
 
@@ -35,14 +37,6 @@ class GameOps:
         ]
 
     # --- 基礎工具 ---
-
-    def _check_emergency(self):
-        """ 內部小工具：直接檢查 F12 有沒有被按著 """
-        if keyboard.is_pressed('F12'):
-            print("\n🛑 [Ops] 偵測到中斷訊號！")
-            raise Exception("Emergency Stop")
-
-
     def swipe_to_bottom(self, count=5):
         """
         [工具] 快速連續往下滑動 (模擬手指快速撥動)
@@ -70,9 +64,11 @@ class GameOps:
         :param img_name: 圖片檔名
         :param off_x, off_y: 偏移量
         :param timeout: 等待超時時間 (秒)。
-                        填 0 = 看一眼沒看到就走 (即時模式)。
-                        填 10 = 最多等 10 秒，期間一出現就點 (等待模式)。
+        填 0 = 看一眼沒看到就走 (即時模式)。
+        填 10 = 最多等 10 秒，期間一出現就點 (等待模式)。
         """
+        self.state.check_stop()
+
         print(f"🔍 尋找目標 {img_name}...")
         
         start_time = time.time() # 紀錄開始時間
@@ -129,7 +125,7 @@ class GameOps:
             screen = self.adb.get_screenshot()
             
             # 點擊確認    
-            if self.click_target(confirm_img):
+            if self.click_target(confirm_img, timeout=5):
                 time.sleep(1) # 點擊後稍微快一點
             else:
                 time.sleep(1)
@@ -152,6 +148,7 @@ class GameOps:
         - 看到 LOSE -> 不動作 -> 回傳 "lose"
         """
         print(f"⚔️ 戰鬥監測中")
+        time.sleep(10)
         start_time = time.time()
         
         while (time.time() - start_time) < timeout:
@@ -197,7 +194,7 @@ class GameOps:
         
         while time.time() - start_time < timeout:
             # 1. 檢查緊急停止
-            self._check_emergency()
+            self.state.check_stop()
             
             # 2. 截圖並找圖
             screen = self.adb.get_screenshot()
