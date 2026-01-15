@@ -265,7 +265,7 @@ class GameBot:
                 #self.restart_game()
 
             
-            current_start_n = start_pkg_n - 1 if d_idx == start_diff_idx else 1
+            current_start_n = start_pkg_n + 1 if d_idx == start_diff_idx else 1
 
             while current_start_n < config.TOTAL_PACKAGES + 1:
                 self.state.check_stop()
