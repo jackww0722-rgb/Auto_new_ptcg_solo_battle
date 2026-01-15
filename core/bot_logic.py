@@ -107,6 +107,9 @@ class GameBot:
         while True:
             self.state.check_stop()
             # 1. 找任務
+            if not self.ops.wait_for_image("change.png"):
+                raise Exception("Doesn't back to room")
+
             if not self.solve_unclear_mission():
                 break # 沒任務了，主旋律結束
             
