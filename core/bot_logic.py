@@ -18,12 +18,12 @@ class GameBot:
             target_app_package=config.target_app_package)
 
         self.finder = ImageFinder()
-        self.state=RunState()
         self.lose_times = 0
         
         # 初始化操作庫 (把手眼交給它)
-        self.ops = GameOps(self.adb, self.finder, self.state)
         self.state_mgr = StateManager()
+        self.state=RunState(self.state_mgr)
+        self.ops = GameOps(self.adb, self.finder, self.state)
         self.reporter = CrashReporter(self.adb)
     
     def recover_game_state(self, max_retries=5):
@@ -135,7 +135,8 @@ class GameBot:
             elif result == "lose":
                 self.ops.clear_settlement("fin_1.png", "fin_2.png", finish_CONFIDENCE = 0.7)
                 self.ops.click_target("fin_2.png", threshold = 0.4) 
-                self.ops.wait_for_image("change.png")
+                if not self.ops.wait_for_image("change.png"):
+                    self.ops.click_target("cancel.png")
                 self.lose_times += 1
                 print(f"======死亡計數器{self.lose_times}次=======")
 
@@ -243,6 +244,7 @@ class GameBot:
         state = self.state_mgr.load_state()
         start_diff_idx = state["diff_index"]
         start_pkg_n = state["package_n"]
+
         self.adb.wait_for_device_boot()
 
         print(f"📂 讀取存檔: 從 [難度 {start_diff_idx+1}] 的 [第 {start_pkg_n+1} 關] 開始")

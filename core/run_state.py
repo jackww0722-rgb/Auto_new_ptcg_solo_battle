@@ -1,12 +1,13 @@
 # run_state.py
 import keyboard
 import time
+from .state_manager import StateManager
 
 class RunState:
-    def __init__(self):
+    def __init__(self, run_state:StateManager):
         self.is_paused = False
         self.is_running = True # 預留給完全停止用
-        
+        self.state_mgr = run_state
         # 初始化時就開啟監聽
         print("🎮 狀態控制器已啟動 (F12=暫停/恢復)")
         keyboard.add_hotkey('F12', self._toggle)
@@ -16,6 +17,11 @@ class RunState:
         self.is_paused = not self.is_paused
         if self.is_paused:
             print("\n⏸️  [PAUSED] 腳本暫停中... (按 F12 繼續)")
+            state = self.state_mgr.load_state()
+            start_diff_idx = state["diff_index"]
+            start_pkg_n = state["package_n"]
+            print(f"目前進度 難度{start_diff_idx}, 第{start_pkg_n+1}包")
+
         else:
             print("\n▶️  [RESUME] 恢復執行...")
 

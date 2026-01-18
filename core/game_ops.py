@@ -7,6 +7,8 @@ from .image_finder import ImageFinder
 from .adb_controller import AdbController
 from .run_state import RunState
 from typing import Optional, Tuple
+import contextlib
+import io
 
 @dataclass
 class CriticalEvent:
@@ -26,7 +28,7 @@ class GameOps:
     CRITICAL_EVENTS = [
             CriticalEvent(
                 trigger_img="resume_battle.png",
-                action_img="resume_battle_cancel.png",
+                action_img="cancel.png",
                 desc="取消續戰",
             ),
             CriticalEvent(
@@ -122,6 +124,7 @@ class GameOps:
 
         print(f"   -> 瘋狂點擊確認")      
         for i in range(max_retry):
+            self.state.check_stop()
             screen = self.adb.get_screenshot()
             
             # 點擊確認    
@@ -151,13 +154,20 @@ class GameOps:
         time.sleep(10)
         start_time = time.time()
         
-        while (time.time() - start_time) < timeout:
+        while (elapsed := time.time() - start_time) < timeout:
+            self.state.check_stop()
+
+            print(f"     已等待{elapsed:.1f}秒", end = "\r", flush=True)
             screen = self.adb.get_screenshot()
             if screen is None: continue
             
             # --- 情況 A: 贏了 (Win) ---
+            is_win = False
 
-            if self.click_target(img_name = win_img, timeout = 5, threshold =win_CONFIDENCE): # 關鍵動作：贏了就點下去！
+            with contextlib.redirect_stdout(io.StringIO()): 
+                is_win = self.click_target(img_name = win_img, timeout = 5, threshold = win_CONFIDENCE)
+
+            if is_win: # 關鍵動作：贏了就點下去！
                 print(f"🎉 偵測到勝利 ({win_img})！")                                
                 time.sleep(1.0) # 點完稍微等一下，確保遊戲接收到
                 
@@ -230,9 +240,6 @@ class GameOps:
             wait_limit = 120 
             start_wait = time.time()
 
-            GRACE_PERIOD = 10  # 秒：等待 B1 出現的寬限期
-            seen_blocking_1 = False
-            b2_first_seen_time = None
 
             
             while time.time() - start_wait < wait_limit: #找大廳
@@ -240,55 +247,16 @@ class GameOps:
                 screenshot = self.adb.get_screenshot()
 
                 has_lobby, lobby_pos = self.finder.find_text_button(screenshot, "battle_1.png")
-                has_b1, _ = self.finder.find_and_get_pos(screenshot, "blocking_event.png")
-                has_b2, _ = self.finder.find_and_get_pos(screenshot, "blocking_event_2.png")
 
-                # === 情境 1：什麼問題都沒有 直接進戰鬥流程 ===
-                if has_lobby and not has_b2:
-                    while not self.wait_for_image("battle_2.png"):
-                        self.adb.tap(lobby_pos[0], lobby_pos[1])
-                    self.click_target("battle_2.png")
-                    return True
-                
-
+                # === 情境：什麼問題都沒有 直接進戰鬥流程 ===
+                if has_lobby:
+                    if self.click_target("battle_2.png"):
+                        return True
+                    self.adb.tap(*lobby_pos)
+                     
+                # === 情境：特殊事件 ===
                 if self.handle_critical_events(screenshot):
-                    continue
-
-                # === 記錄 B1 ===
-                if has_b1:
-                    seen_blocking_1 = True
-                    b2_first_seen_time = None  # 重置
-
-                # === 記錄 B2 首次出現時間 ===
-                if has_b2 and b2_first_seen_time is None:
-                    b2_first_seen_time = time.time()
-
-                # === 情境 2：只有 B1 ===
-                if has_b1 and not has_lobby:
-                    print("⏳ 僅 B1，等待消失")
-                    time.sleep(3)
-                    continue
-
-                # === 情境 3 or 4：B2 + 大廳 ===
-                if has_lobby and has_b2:
-
-                    # 尚未看到 B1 → 等待一小段時間
-                    if not seen_blocking_1:
-                        elapsed = time.time() - b2_first_seen_time
-
-                        if elapsed < GRACE_PERIOD:
-                            print(f"⏳ B2 出現，等待 B1 ({elapsed:.1f}s)")
-                            time.sleep(2)
-                            continue
-                        else:
-                            print("🧠 等不到 B1，判定已結束，放行")
-
-                    # seen_blocking_1 == True 或超時
-                    while not self.wait_for_image("battle_2.png"):
-                        self.adb.tap(lobby_pos[0], lobby_pos[1])
-                    self.click_target("battle_2.png")
-                    return True
-                
+                    continue                
                 
                 
             print("      ❌ 等待超時：無法回到大廳")
