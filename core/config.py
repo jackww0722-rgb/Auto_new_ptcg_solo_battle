@@ -22,7 +22,6 @@ ASSETS_DIR = ROOT_DIR / "assets"
 
 
 TOTAL_PACKAGES=13
-START_AT=1
 
 DIFFICULTY_LIST = ["diff_1.png", "diff_2.png", "diff_3.png", "diff_4.png"]
 STATE_FILE = "bot_state.json"

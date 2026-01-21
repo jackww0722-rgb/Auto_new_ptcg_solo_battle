@@ -28,7 +28,7 @@ class GameOps:
     CRITICAL_EVENTS = [
             CriticalEvent(
                 trigger_img="resume_battle.png",
-                action_img="cancel.png",
+                action_img="resume_battle_cancel.png",
                 desc="取消續戰",
             ),
             CriticalEvent(
@@ -49,6 +49,7 @@ class GameOps:
             # (500, 900) -> (500, 200)
             # 手指從下往上滑 = 畫面往下捲
             # duration=150 = 快速撥動 (會有慣性)
+            self.state.check_stop()
             self.adb.swipe(500, 900, 500, 200, duration=500)
             
             # ⚠️ 重要：短暫休息，避免指令連發導致失效
@@ -250,7 +251,7 @@ class GameOps:
 
                 # === 情境：什麼問題都沒有 直接進戰鬥流程 ===
                 if has_lobby:
-                    if self.click_target("battle_2.png"):
+                    if self.click_target("battle_2.png", timeout = 5):
                         return True
                     self.adb.tap(*lobby_pos)
                      

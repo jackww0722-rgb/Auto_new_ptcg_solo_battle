@@ -10,14 +10,14 @@ class StateManager:
     def load_state(self):
         """ 讀取進度，如果沒有存檔就回傳預設值 (從第0個難度, 第1關開始) """
         if not self.file_path.exists():
-            return {"diff_index": 0, "package_n": 1}
+            return {"diff_index": 0, "package_n": 0}
         
         try:
             with open(self.file_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             print("⚠️ 存檔損毀，重置進度")
-            return {"diff_index": 0, "package_n": 1}
+            return {"diff_index": 0, "package_n": 0}
 
     def save_state(self, diff_index, package_n):
         """ 儲存當前進度 """
