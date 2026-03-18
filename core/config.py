@@ -21,7 +21,7 @@ ROOT_DIR = CORE_DIR.parent
 ASSETS_DIR = ROOT_DIR / "assets"
 
 
-TOTAL_PACKAGES=13
+TOTAL_PACKAGES=15
 
 DIFFICULTY_LIST = ["diff_1.png", "diff_2.png", "diff_3.png", "diff_4.png"]
 STATE_FILE = "bot_state.json"

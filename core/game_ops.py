@@ -251,9 +251,11 @@ class GameOps:
 
                 # === 情境：什麼問題都沒有 直接進戰鬥流程 ===
                 if has_lobby:
-                    if self.click_target("battle_2.png", timeout = 5):
-                        return True
                     self.adb.tap(*lobby_pos)
+                    if self.click_target("battle_2.png", timeout = 5):
+                        time.sleep(1)
+                        self.click_target("battle_3.png", timeout = 5)
+                        return True
                      
                 # === 情境：特殊事件 ===
                 if self.handle_critical_events(screenshot):
