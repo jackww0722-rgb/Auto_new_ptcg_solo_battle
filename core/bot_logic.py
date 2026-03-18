@@ -93,7 +93,7 @@ class GameBot:
         in_lobby, _ = self.finder.find_and_get_pos(screen, "change.png")
         if not in_lobby:
             raise Exception("沒有回到關卡選擇畫面")      
-        found, pos = self.finder.find_and_get_pos(screen, "unclear.png")
+        found, pos = self.finder.find_and_get_pos(screen, "unclear.png", threshold = 0.5)
         
         if found:
             self.adb.tap(pos[0], pos[1])
@@ -111,6 +111,7 @@ class GameBot:
                 raise Exception("Doesn't back to room")
 
             if not self.solve_unclear_mission():
+                print("主旋律結束")
                 break # 沒任務了，主旋律結束
             
             has_played = True
